@@ -41,7 +41,7 @@
 
 #ifdef HAVE_DLOPEN
 
-#define BITARRAY_SIZE 1024*1024
+#define BITARRAY_DEFAULT_SIZE 1024*1024
 
 /**
  * udf_bitarray
@@ -61,32 +61,63 @@ char *bitarray(UDF_INIT *initid, UDF_ARGS *args, char *result,
 }
 #endif
 
+typedef struct st_bitarray_container {
+    long long size;
+    char *bitarray;
+} bitarray_container;
+
 /**
  * int stat_accum_int(i)
  * 
  * return the i added to stat_accum_int(i-1)  
  */
 my_bool bitarray_init(UDF_INIT *initid, UDF_ARGS *args, char *message) {
-    my_bool status;
-    if(args->arg_count != 1){
-        strcpy(message, "Expect exactly one argument (udf: bitarray)");
-        status = 1;
-    } else if(!(initid->ptr = malloc(BITARRAY_SIZE * sizeof(char)))){
-        initid->ptr = NULL;
-        strcpy(message, "Could not allocate memory (udf: bitarray)");
-        status = 1;
-    } else {
-        initid->maybe_null = 0;
-        initid->max_length = BITARRAY_SIZE;
-        args->arg_type[0] = INT_RESULT;
-        status = 0;
+    bitarray_container *container;
+    long long bits;
+    long long size = BITARRAY_DEFAULT_SIZE;
+    if(args->arg_count < 1 || args->arg_count > 2){
+        strcpy(message, "Expect one or two arguments (udf: bitarray)");
+        return 1;
     }
-    return status;
+    if (args->arg_count == 2) 
+    {
+        if(args->arg_type[1] != INT_RESULT) {
+            strcpy(message, "Second argument must be an int (udf: bitarray)");
+            return 1;
+        } else {
+            bits = *((long long*) args->args[1]);
+            size = bits / 8; 
+            if (bits & 7) {
+                size += 1;
+            }
+        }
+    } 
+    container = malloc(sizeof(bitarray_container));
+    if (! container) {
+        container = NULL;
+        strcpy(message, "Could not allocate memory (udf: bitarray)");
+        return 1;
+    }
+
+    container->size = size;
+    container->bitarray = malloc(size * sizeof(char));
+
+    if (!container->bitarray) {
+        container->bitarray = NULL;
+        strcpy(message, "Could not allocate memory (udf: bitarray)");
+        return 1;
+    }
+    initid->ptr = (char *) container;
+    initid->maybe_null = 0;
+    initid->max_length = size;
+    args->arg_type[0] = INT_RESULT;
+    return 0;
 }
 
 void bitarray_clear( UDF_INIT* initid, char* is_null, char *error ) {
-    for (int i=0; i < BITARRAY_SIZE; i++) {
-        initid->ptr[i] = 0;
+    bitarray_container *container = (bitarray_container *)initid->ptr;
+    for (int i=0; i < container->size; i++) {
+        container->bitarray[i] = 0;
     }
 }
 
@@ -97,32 +128,36 @@ void bitarray_reset(UDF_INIT* initid, UDF_ARGS* args, char* is_null, char *error
 
 void bitarray_add(UDF_INIT* initid, UDF_ARGS* args, char* is_null, char *error)
 {
+    bitarray_container *container = (bitarray_container *)initid->ptr;
     long long idx, offset, id;
-    char *bitarray;
 
     if(args->args[0] != NULL){
         id = *((long long*) args->args[0]);
         idx = id / 8;
-        if (idx >= BITARRAY_SIZE) {
+        if (idx >= container->size) {
             *error = 1;
             return;
         }
         offset = id % 8;
-        bitarray = (char *) initid->ptr;
-        bitarray[idx] |= 1 << offset;
+        container->bitarray[idx] |= 1 << offset;
     } 
 }
 
 char *bitarray(UDF_INIT *initid, UDF_ARGS *args,
           char *result, unsigned long *length,
           char *is_null, char *error) {
-    *length = BITARRAY_SIZE;
-    return initid->ptr;
+    bitarray_container *container = (bitarray_container *)initid->ptr;
+    *length = container->size;
+    return container->bitarray;
 }
 
 void bitarray_deinit(UDF_INIT *initid){
-    if(initid->ptr != NULL){
-        free(initid->ptr);
+    bitarray_container *container = (bitarray_container *)initid->ptr;
+    if (container != NULL) {
+        if (container->bitarray != NULL) {
+            free(container->bitarray);
+        }
+        free(container);
     }
 }
 
