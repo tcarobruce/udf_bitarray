@@ -66,11 +66,6 @@ typedef struct st_bitarray_container {
     char *bitarray;
 } bitarray_container;
 
-/**
- * int stat_accum_int(i)
- * 
- * return the i added to stat_accum_int(i-1)  
- */
 my_bool bitarray_init(UDF_INIT *initid, UDF_ARGS *args, char *message) {
     bitarray_container *container;
     long long size = BITARRAY_DEFAULT_SIZE;
