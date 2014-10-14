@@ -73,7 +73,6 @@ typedef struct st_bitarray_container {
  */
 my_bool bitarray_init(UDF_INIT *initid, UDF_ARGS *args, char *message) {
     bitarray_container *container;
-    long long bits;
     long long size = BITARRAY_DEFAULT_SIZE;
     if(args->arg_count < 1 || args->arg_count > 2){
         strcpy(message, "Expect one or two arguments (udf: bitarray)");
@@ -85,11 +84,7 @@ my_bool bitarray_init(UDF_INIT *initid, UDF_ARGS *args, char *message) {
             strcpy(message, "Second argument must be an int (udf: bitarray)");
             return 1;
         } else {
-            bits = *((long long*) args->args[1]);
-            size = bits / 8; 
-            if (bits & 7) {
-                size += 1;
-            }
+            size = *((long long*) args->args[1]) / 8 + 1;
         }
     } 
     container = malloc(sizeof(bitarray_container));
